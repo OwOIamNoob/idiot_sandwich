@@ -1,0 +1,9 @@
+_target_: app.src.detector.FaceDetector
+
+defaults:
+  - model: default.yaml
+
+resize: 0.5
+
+
+

@@ -1,0 +1,12 @@
+_target_: app.src.splitter.VideoParser
+
+defaults:
+  - _self_
+  - detector: default.yaml
+  - annotator: default.yaml
+  - filter: default.yaml
+
+data_dir: abc
+
+stride: 3
+

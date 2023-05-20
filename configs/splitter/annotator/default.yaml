@@ -1,0 +1,13 @@
+_target_: app.src.annotator.Annotator
+
+defaults:
+  - transform: default.yaml
+
+net:
+  _target_: app.model.simple_resnet.SimpleResnet
+  model_name: "resnet18"
+  weights: "DEFAULT"
+  output_shape: [68, 2]
+
+ckpt_path:  ${path.root_dir}/model/model.pth #checkout first, interpolation later
+dimension: [224, 224]

@@ -1,0 +1,17 @@
+root_dir: ${oc.env:PROJECT_ROOT}/app/
+
+# path to  asset directory, in case u use video as input
+data_dir: ${path.root_dir}/asset/
+
+
+# path to output directory, created dynamically by hydra
+# path generation pattern is specified in `configs/hydra/default.yaml`
+# use it to store all files generated during the run, like ckpts and metrics
+output_dir: ${path.data_dir}/output/
+
+# file path to triangle order of the delaunay
+filter_asset: ${path.root_dir}/asset/filter
+filter_base: ${path.filter_asset}/mesh.txt
+
+# path to working directory
+work_dir: ${hydra:runtime.cwd}

@@ -1,0 +1,4 @@
+_target_: app.src.filter.FacialFilter
+
+
+path: ${path.filter_asset}/asset 

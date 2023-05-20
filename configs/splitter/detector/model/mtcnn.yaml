@@ -1,0 +1,7 @@
+_target_: facenet_pytorch.MTCNN
+thresholds: [0.95, 0.95, 0.99]
+select_largest: False
+device: cpu
+keep_all: True
+image_size: 224
+post_process: False
