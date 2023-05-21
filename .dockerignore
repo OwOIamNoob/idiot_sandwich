@@ -1,0 +1,11 @@
+# ignore everythin
+*
+
+!/app/*
+!/configs/*
+!.project-root
+!requirements.txt
+!requirements_for_docker.txt
+!README.md
+!setup.py 
+!app.py

@@ -5,7 +5,6 @@ import cv2
 import hydra
 import numpy as np
 import pyrootutils
-import omegaconf
 from omegaconf import DictConfig
 
 # pyrootutils.setup_root(search_from=__file__, indicator=".project-root",pythonpath=True)
@@ -20,6 +19,7 @@ class FacialFilter:
     
     def __init__(self, path):
         self.lm = []
+        self.normalize = []
         self.triangles = []
         self.image = []
         self.load(path)
@@ -36,13 +36,11 @@ class FacialFilter:
                     if image is None:
                         self.lm.append(np.loadtxt(img_path))
                     else:
-                        self.image.append(cv2.imread(img_path, cv2.IMREAD_UNCHANGED))
+                        self.image.append(cv2.cvtColor(image, cv2.COLOR_BGRA2RGBA))
         else:
             image = cv2.cvtColor(cv2.imread(path, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGRA2RGBA)
             self.image.append(image)
         
-        print(len(self.image))
-        print(self.lm[0].shape)
     
     @staticmethod
     def setup_base(path):
@@ -57,6 +55,10 @@ class FacialFilter:
 
     def setup(self, index):
         h, w, _ = self.image[index].shape
+        self.normalize = [np.min(self.lm[index][0:68, 0]), np.min(self.lm[index][0:68, 1]), np.max(self.lm[index][0:68, 0]), np.max(self.lm[index][0:68, 1])]
+        scale = [1 / (self.normalize[2] - self.normalize[0]), 1 / (self.normalize[3] - self.normalize[1])]
+        self.normalize = [self.normalize[0] * scale[0], self.normalize[1] * scale[1],
+                           (1 - self.normalize[2]) * scale[0], (1 - self.normalize[3]) * scale[1]]
         self.triangles = np.array([[self.lm[index][triangle[0]], self.lm[index][triangle[1]], self.lm[index][triangle[2]]] 
                             for triangle in FacialFilter.list_of_triangles]) * [h, w]
         # to get the actual position of the triangle
@@ -65,8 +67,8 @@ class FacialFilter:
     
     # return scaled set of triangles
     # the triangles is processed in [0, size] dimension, no translation because we're on image processing task
-    @staticmethod
-    def get_triangles(lms, size, *, transform=False):
+    # @staticmethod
+    def get_triangles(self, lms, size, *, transform=False):
         output = []
         lm_boxes = []
         for i in range(lms.shape[0]):
@@ -76,7 +78,9 @@ class FacialFilter:
 
             lm = lm.astype(int)
             lm_box = np.array(cv2.boundingRect(lm), dtype=float)
-            lm_box += [-0.1 * lm_box[2], -0.2 * lm_box[3], 0.2  * lm_box[2], 0.2 * lm_box[3]] 
+            lm_box += [- self.normalize[0] * lm_box[2], - self.normalize[1] * lm_box[3],
+                        (self.normalize[0] + self.normalize[2])  * lm_box[2],
+                          (self.normalize[1] + self.normalize[3]) * lm_box[3]] 
             lm_box = np.ceil(lm_box).astype(int)
             lm = np.concatenate((lm, np.array([[lm_box[0], lm_box[1]],
                                                 [lm_box[0] + lm_box[2] - 1, lm_box[1]],
@@ -116,7 +120,7 @@ class FacialFilter:
 
             # use fixed point first
             mask = np.zeros((r2[3], r2[2], 4), dtype = np.float32)
-            cv2.fillConvexPoly(mask, np.int32(tri2Cropped), (1.0, 1.0, 1.0, 1.0), 16, 0);
+            cv2.fillConvexPoly(mask, np.int32(tri2Cropped), (1.0, 1.0, 1.0, 1.0), 16, 0)
             img2Cropped = img2Cropped * mask
      
             # Copy triangular region of the rectangular patch to the output image
@@ -127,7 +131,7 @@ class FacialFilter:
         return output
     
     def process(self, image, preds, face_boxes, *, transform=False):
-        set_triangles, ft_boxes = FacialFilter.get_triangles(preds, face_boxes[:, 2:4], transform=transform)
+        set_triangles, ft_boxes = self.get_triangles(preds, face_boxes[:, 2:4], transform=transform)
         for triangles, ft_box, face_box in zip(set_triangles[::-1], ft_boxes[::-1], face_boxes[::-1]):
             transformed = self.warp_image(triangles, ft_box)
             transformed = cv2.GaussianBlur(transformed, (3, 3), 10)
@@ -185,7 +189,6 @@ class FacialFilter:
             if normalized:
                 lm = lm * size + translate
             lm = lm.astype(int)
-            # print(lm)
             for triplet  in FacialFilter.list_of_triangles:
                 cv2.line(image, lm[triplet[0]], lm[triplet[1]], thickness=1, color=(255, 0, 0))
                 cv2.line(image, lm[triplet[0]], lm[triplet[2]], thickness=1, color=(255, 0, 0))
@@ -202,7 +205,6 @@ class FacialFilter:
                           max(0, mat[0] + mat[2] - img_shape[1]), 
                           max(0, mat[1] + mat[3] - img_shape[0])]).astype(int)
         bound[2:4] -= bound[0:2]
-        # print(bound)
         dst = mat - bound
         ft_box = np.array([0 - bound[0], 0 - bound[1], ft_box[2] - bound[2], ft_box[3] - bound[3]] , dtype=int)
         return dst, ft_box
@@ -210,8 +212,6 @@ class FacialFilter:
     @staticmethod
     def apply_filter(src, filter, src_box, ft_box):
         dst, ft = FacialFilter.find_overlay(src_box, ft_box, src.shape)
-        # print(filter.shape)
-        # print(dst, ft)
         alpha = filter[ft[1] : ft[1] + ft[3], ft[0] : ft[0] + ft[2], 3].astype(float) / 255
         alpha = cv2.merge((alpha, alpha, alpha))
         src[dst[1] : dst[1] + dst[3], dst[0] : dst[0] + dst[2]] = src[dst[1] : dst[1] + dst[3], dst[0] : dst[0] + dst[2]] * ((1.0, 1.0, 1.0) - alpha) + filter[ft[1] : ft[1] + ft[3], ft[0] : ft[0] + ft[2], 0:3] * alpha
@@ -236,8 +236,6 @@ if __name__ == "__main__":
     @hydra.main(version_base="1.3", config_path=config_path, config_name="app.yaml")
     def main(cfg: DictConfig):
         filter = hydra.utils.instantiate(cfg.splitter.filter)
-        # filter = FacialFilter("app/asset/filter/base.txt",
-        #                       "app/asset/filter/image")
         print(type(filter))
     
     main()

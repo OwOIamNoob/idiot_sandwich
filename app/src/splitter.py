@@ -1,14 +1,13 @@
 import os
 import cv2
 import numpy as np
-from matplotlib import pyplot as plt
 import mediapipe as mp
 import pyrootutils
 import hydra
 from omegaconf import OmegaConf, DictConfig
 
 
-pyrootutils.setup_root(search_from=__file__, indicator=".project-root", pythonpath=True)
+# pyrootutils.setup_root(search_from=__file__, indicator=".project-root", pythonpath=True)
 
 
 from app.src.annotator import Annotator
@@ -27,12 +26,15 @@ class VideoParser:
         self.data_dir = data_dir
         self.video_name = ""
         self.stride = stride
+
         self.detector = detector
         self.annotator = annotator
         self.index = 0
         
+
         self.filter = filter
         self.filter.switch(0)
+
 
         #landmarks properties
         self.boxes = []
@@ -78,6 +80,7 @@ class VideoParser:
     def execute_frame(self, frame):
         self.index += 1
         image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        # image = frame
         if self.index % self.stride == 0:
             detected, self.boxes, faces = self.detector.face_detect(image)
             
@@ -103,6 +106,17 @@ class VideoParser:
             return frame
         return image
     
+    # to process on single frame
+    def process_image(self, image):
+        detected, boxes, faces = self.detector.face_detect(image)
+        if not detected:
+            return image
+        
+        bounding_box = np.array([[max(0,box[0]), max(0,box[1])] for box in self.boxes])
+        ratio = np.array([[box[2], box[3]] for box in self.boxes])
+        lm = self.annotator.annotate(faces, np.zeros(bounding_box.shape), np.ones(ratio.shape))
+
+        return self.filter.process(image, lm, boxes, transform=True)
     def parse_video(self):
         output_dir = os.path.join(os.path.join(self.data_dir, "output"), self.video_name)
         os.makedirs(output_dir)
@@ -125,14 +139,6 @@ if __name__ == "__main__":
     def main(cfg: DictConfig):
         # print(OmegaConf.to_yaml(cfg))
         FacialFilter.setup_base(cfg.path.filter_base)
-        # capturer: VideoParser = hydra.utils.instantiate(cfg.splitter)
-        capturer = VideoParser(
-                                "abc",
-                                3,
-                                detector = hydra.utils.instantiate(cfg.splitter.detector),
-                                annotator = hydra.utils.instantiate(cfg.splitter.annotator),
-                                filter = FacialFilter("app/asset/filter/asset")
-                                )
-
+        capturer: VideoParser = hydra.utils.instantiate(cfg.splitter)
         capturer.camera(0)
     main()

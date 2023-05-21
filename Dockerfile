@@ -1,18 +1,21 @@
 ARG FROM_IMAGE_NAME=nvcr.io/nvidia/pytorch:23.02-py3
-FROM ${FROM_IMAGE_NAME}
+FROM python:3.10
+
+# Cài đặt libgl1-mesa-glx
+RUN apt-get update && apt-get install -y libgl1-mesa-glx
+
 
 # Set working directory
-WORKDIR /workspace
+WORKDIR /app
 
 # Copy requirements.txt and install dependencies
 COPY requirements_for_docker.txt .
 
-RUN pip install --no-cache-dir -r requirements_for_docker.txt
+RUN pip install -r requirements_for_docker.txt
 
 # Copy the rest of the files
 COPY . .
 
-RUN git config --global --add safe.directory /workspace
 
 # Run bash by default
-CMD ["python", "app/splitter.py"]
+CMD ["python", "app.py"]
